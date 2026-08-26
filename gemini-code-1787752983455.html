@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Real Madrid vs Barcelona</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; touch-action: none; }
+        body { background: #000; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 100vh; padding: 10px; }
+        #score-board { width: 100%; display: flex; justify-content: space-between; align-items: center; background: #111; padding: 8px 12px; border-radius: 10px; border: 1px solid #333; }
+        .team { display: flex; align-items: center; gap: 6px; font-weight: bold; font-size: 12px; }
+        .badge { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 900; }
+        .rm { background: #fff; color: #000; }
+        .barca { background: #a50044; color: #edbb00; }
+        #score { font-size: 18px; font-weight: 900; color: #00ffcc; }
+        canvas { background: #c8e8fc; border-radius: 12px; border: 3px solid #0f172a; display: block; }
+        .controls { width: 100%; display: flex; gap: 8px; }
+        button { flex: 1; padding: 10px; background: #28a745; color: white; border: none; font-weight: bold; border-radius: 8px; font-size: 12px; }
+        #mode-btn { background: #007bff; }
+    </style>
+</head>
+<body>
+
+    <div id="score-board">
+        <div class="team"><div class="badge rm">RMA</div>REAL MADRID</div>
+        <div id="score">0 - 0</div>
+        <div class="team">BARCELONA<div class="badge barca">BAR</div></div>
+    </div>
+
+    <canvas id="canvas" width="340" height="480"></canvas>
+
+    <div class="controls">
+        <button id="reset-btn">Yeniden Başlat</button>
+        <button id="mode-btn">Mod: VS Yapay Zeka</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const resetBtn = document.getElementById('reset-btn');
+        const modeBtn = document.getElementById('mode-btn');
+
+        const W = 340, H = 480;
+        let vsAI = true, scoreA = 0, scoreB = 0, isGoal = false;
+
+        class Ball {
+            constructor() { this.reset(); this.r = 8; }
+            reset() { this.x = W / 2; this.y = H / 2; this.vx = 0; this.vy = 0; }
+            update() {
+                this.x += this.vx; this.y += this.vy;
+                // Topun hızı ve kayması artırıldı (0.985 sürtünme)
+                this.vx *= 0.985; this.vy *= 0.985;
+                
+                const goalW = 110, gLeft = (W - goalW) / 2, gRight = (W + goalW) / 2;
+
+                if (this.x - this.r < 0) { this.x = this.r; this.vx *= -0.85; }
+                if (this.x + this.r > W) { this.x = W - this.r; this.vx *= -0.85; }
+
+                if (this.y - this.r < 0) {
+                    if (this.x > gLeft && this.x < gRight) { if (!isGoal) handleGoal('B'); }
+                    else { this.y = this.r; this.vy *= -0.85; }
+                }
+                if (this.y + this.r > H) {
+                    if (this.x > gLeft && this.x < gRight) { if (!isGoal) handleGoal('A'); }
+                    else { this.y = H - this.r; this.vy *= -0.85; }
+                }
+            }
+            draw() {
+                ctx.beginPath(); ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffcc00'; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = '#000'; ctx.stroke();
+            }
+        }
+
+        class Disk {
+            constructor(team, isKeeper = false) {
+                this.team = team; this.isKeeper = isKeeper;
+                this.r = isKeeper ? 14 : 16;
+                this.x = 0; this.y = 0; this.vx = 0; this.vy = 0;
+            }
+            update() {
+                this.x += this.vx; this.y += this.vy;
+                // Oyuncu sürtünmesi az düşürülerek daha seri hareket sağlandı (0.97)
+                this.vx *= 0.97; this.vy *= 0.97;
+
+                if (this.isKeeper) {
+                    this.vy = 0;
+                    this.y = this.team === 'A' ? 20 : H - 20;
+                    const gLeft = (W - 110) / 2 + this.r, gRight = (W + 110) / 2 - this.r;
+                    this.x = Math.max(gLeft, Math.min(gRight, this.x));
+                    if (Math.abs(this.vx) < 0.1) this.x += (ball.x - this.x) * 0.1;
+                    return;
+                }
+
+                if (this.x - this.r < 0) { this.x = this.r; this.vx *= -0.7; }
+                if (this.x + this.r > W) { this.x = W - this.r; this.vx *= -0.7; }
+                if (this.y - this.r < 0) { this.y = this.r; this.vy *= -0.7; }
+                if (this.y + this.r > H) { this.y = H - this.r; this.vy *= -0.7; }
+
+                if (this.team === 'A' && this.y + this.r > H / 2) { this.y = H / 2 - this.r; this.vy *= -0.5; }
+                if (this.team === 'B' && this.y - this.r < H / 2) { this.y = H / 2 + this.r; this.vy *= -0.5; }
+            }
+            draw() {
+                ctx.beginPath(); ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+                ctx.fillStyle = this.team === 'A' ? '#ffffff' : '#a50044';
+                ctx.strokeStyle = this.team === 'A' ? '#eab308' : '#004d98';
+                ctx.lineWidth = 3; ctx.fill(); ctx.stroke();
+            }
+        }
+
+        const ball = new Ball();
+        const disks = [
+            new Disk('A', true), new Disk('A'), new Disk('A'), new Disk('A'),
+            new Disk('B', true), new Disk('B'), new Disk('B'), new Disk('B')
+        ];
+
+        function resetPositions() {
+            ball.reset();
+            disks[0].x = W / 2; disks[0].y = 20;
+            disks[1].x = W * 0.25; disks[1].y = 100;
+            disks[2].x = W * 0.5;  disks[2].y = 150;
+            disks[3].x = W * 0.75; disks[3].y = 100;
+
+            disks[4].x = W / 2; disks[4].y = H - 20;
+            disks[5].x = W * 0.25; disks[5].y = H - 100;
+            disks[6].x = W * 0.5;  disks[6].y = H - 150;
+            disks[7].x = W * 0.75; disks[7].y = H - 100;
+            disks.forEach(d => { d.vx = 0; d.vy = 0; });
+        }
+
+        let selected = null, dragPos = null;
+        function getPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return { x: clientX - rect.left, y: clientY - rect.top };
+        }
+
+        const handleStart = e => {
+            const pos = getPos(e);
+            disks.forEach(d => {
+                if (d.isKeeper || (vsAI && d.team === 'A')) return;
+                if (Math.hypot(d.x - pos.x, d.y - pos.y) < d.r + 15) { selected = d; dragPos = pos; }
+            });
+        };
+        const handleMove = e => { if (selected) dragPos = getPos(e); };
+        const handleEnd = () => {
+            if (selected && dragPos) {
+                const dx = selected.x - dragPos.x, dy = selected.y - dragPos.y;
+                // Daha hızlı vuruş gücü çarpanı (0.15)
+                const p = Math.min(Math.hypot(dx, dy) * 0.15, 15);
+                if (p > 0.5) {
+                    const a = Math.atan2(dy, dx);
+                    selected.vx = Math.cos(a) * p; selected.vy = Math.sin(a) * p;
+                }
+            }
+            selected = null; dragPos = null;
+        };
+
+        canvas.addEventListener('touchstart', handleStart);
+        canvas.addEventListener('mousedown', handleStart);
+        window.addEventListener('touchmove', handleMove);
+        window.addEventListener('mousemove', handleMove);
+        window.addEventListener('touchend', handleEnd);
+        window.addEventListener('mouseup', handleEnd);
+
+        function resolveCollisions() {
+            const all = [...disks, ball];
+            for (let i = 0; i < all.length; i++) {
+                for (let j = i + 1; j < all.length; j++) {
+                    let o1 = all[i], o2 = all[j];
+                    let dx = o2.x - o1.x, dy = o2.y - o1.y, dist = Math.hypot(dx, dy);
+                    let minDist = o1.r + o2.r;
+                    
+                    if (dist < minDist) {
+                        let overlap = minDist - dist + 1, nx = dx / (dist||1), ny = dy / (dist||1);
+                        
+                        if (!o1.isKeeper) { o1.x -= nx * overlap * 0.5; o1.y -= ny * overlap * 0.5; }
+                        if (!o2.isKeeper) { o2.x += nx * overlap * 0.5; o2.y += ny * overlap * 0.5; }
+                        
+                        let kx = o1.vx - o2.vx, ky = o1.vy - o2.vy, p = (nx * kx + ny * ky) * 0.95;
+                        if (!o1.isKeeper) { o1.vx -= p * nx; o1.vy -= p * ny; }
+                        if (!o2.isKeeper) { o2.vx += p * nx; o2.vy += p * ny; }
+
+                        if ((o1 === ball && o2.isKeeper) || (o2 === ball && o1.isKeeper)) {
+                            ball.vy = o1.isKeeper ? (o1.team === 'A' ? 6 : -6) : (o2.team === 'A' ? 6 : -6);
+                        }
+                    }
+                }
+            }
+        }
+
+        let aiTimer = 0;
+        function updateAI() {
+            if (!vsAI || isGoal) return;
+            if (++aiTimer % 55 === 0) {
+                const aiDisks = disks.filter(d => d.team === 'A' && !d.isKeeper);
+                const attacker = aiDisks[Math.floor(Math.random() * aiDisks.length)];
+                if (attacker) {
+                    const a = Math.atan2(ball.y - attacker.y, ball.x - attacker.x);
+                    const p = 8 + Math.random() * 5;
+                    attacker.vx = Math.cos(a) * p; attacker.vy = Math.sin(a) * p;
+                }
+            }
+        }
+
+        function handleGoal(team) {
+            isGoal = true;
+            if (team === 'A') scoreA++; else scoreB++;
+            scoreEl.innerText = `${scoreA} - ${scoreB}`;
+            setTimeout(() => { resetPositions(); isGoal = false; }, 1200);
+        }
+
+        function drawPitch() {
+            ctx.clearRect(0, 0, W, H);
+            ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2;
+            ctx.strokeRect(0, 0, W, H);
+            ctx.beginPath(); ctx.moveTo(0, H/2); ctx.lineTo(W, H/2); ctx.strokeStyle = '#ef4444'; ctx.stroke();
+            ctx.beginPath(); ctx.arc(W/2, H/2, 35, 0, Math.PI*2); ctx.strokeStyle = '#38bdf8'; ctx.stroke();
+            ctx.strokeRect((W-110)/2, 0, 110, 30);
+            ctx.strokeRect((W-110)/2, H-30, 110, 30);
+        }
+
+        function drawAimLine() {
+            if (!selected || !dragPos) return;
+            const dx = selected.x - dragPos.x, dy = selected.y - dragPos.y;
+            ctx.beginPath();
+            ctx.moveTo(selected.x, selected.y);
+            // Nişan çizgisi daha da kısaltıldı (0.4 çarpanı)
+            ctx.lineTo(selected.x + dx * 0.4, selected.y + dy * 0.4);
+            ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 3;
+            ctx.setLineDash([4, 4]); ctx.stroke(); ctx.setLineDash([]);
+        }
+
+        function loop() {
+            ball.update(); disks.forEach(d => d.update());
+            resolveCollisions(); updateAI();
+            drawPitch(); ball.draw(); disks.forEach(d => d.draw());
+            drawAimLine();
+            requestAnimationFrame(loop);
+        }
+
+        resetBtn.onclick = () => { scoreA = 0; scoreB = 0; scoreEl.innerText = '0 - 0'; resetPositions(); };
+        modeBtn.onclick = () => { vsAI = !vsAI; modeBtn.innerText = vsAI ? "Mod: VS Yapay Zeka" : "Mod: 2 Oyuncu"; resetPositions(); };
+
+        resetPositions();
+        loop();
+    </script>
+</body>
+</html>
