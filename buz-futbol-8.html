@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Buz Sahası Futbol</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; overscroll-behavior: none; }
+body {
+  background: #05070f; color: #fff; font-family: -apple-system, Arial, sans-serif;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  min-height: 100vh; padding: 6px; gap: 5px;
+}
+#score-board {
+  width: 100%; max-width: 380px; display: flex; justify-content: space-between; align-items: center;
+  background: #10131f; padding: 6px 10px; border-radius: 10px; border: 1px solid #262b40;
+}
+.team { display: flex; align-items: center; gap: 5px; font-weight: 800; font-size: 10px; letter-spacing: .5px; }
+.badge { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 900; border: 2px solid; }
+.blue { background: #1b2a4a; color: #6cc4ff; border-color: #3ec6e0; }
+.red  { background: #3a0f18; color: #ff9d7a; border-color: #e94560; }
+#score { font-size: 16px; font-weight: 900; color: #ffd369; }
+#timer { font-size: 10px; color: #7d8bab; margin-top: -3px; }
+canvas { background: #0b3d24; border-radius: 12px; border: 3px solid #262b40; display: block; touch-action: none; max-height: 62vh; width: auto; aspect-ratio: 340/500; }
+.controls { width: 100%; max-width: 380px; display: flex; gap: 8px; }
+button { flex: 1; padding: 9px; border: none; font-weight: 700; border-radius: 9px; font-size: 11.5px; cursor: pointer; }
+#reset-btn { background: #1e824c; color: #fff; }
+#mode-btn { background: #2a5cc7; color: #fff; }
+#goalFlash {
+  position: absolute; top: 42%; left: 50%; transform: translate(-50%,-50%);
+  font-size: 34px; font-weight: 900; color: #ffd369; text-shadow: 2px 2px 8px #000;
+  opacity: 0; pointer-events: none; transition: opacity .25s; letter-spacing: 1px;
+}
+#pitchWrap { position: relative; }
+#endOverlay {
+  position: absolute; inset: 0; background: rgba(5,7,15,0.88); border-radius: 10px;
+  display: none; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  text-align: center; padding: 20px;
+}
+#endOverlay h2 { font-size: 22px; color: #ffd369; }
+#endOverlay p { font-size: 14px; color: #cdd5ee; }
+#endOverlay button { padding: 10px 24px; background: #e94560; border: none; border-radius: 8px; color: #fff; font-weight: 700; margin-top: 6px; }
+#control-mode-btn { background: #6c3fc7; color: #fff; }
+#arrowPad {
+  display: none; flex-direction: column; align-items: center; gap: 4px; margin-top: 0;
+}
+.arrowRow { display: flex; gap: 4px; align-items: center; }
+.dpad-btn {
+  width: 44px; height: 44px; border-radius: 9px; background: #16223d;
+  border: 2px solid #3ec6e0; color: #6cc4ff; font-size: 18px; font-weight: 900;
+  display: flex; align-items: center; justify-content: center; cursor: pointer; touch-action: none;
+}
+.dpad-btn:active { background: #3ec6e0; color: #16223d; }
+.dpad-spacer { width: 44px; height: 44px; }
+#shootBar {
+  display: none; flex-direction: column; align-items: center; gap: 4px; margin-top: 2px; width: 100%; max-width: 380px;
+}
+#shootBarTrack {
+  width: 100%; height: 22px; background: #16223d; border: 2px solid #3ec6e0; border-radius: 8px; overflow: hidden; position: relative;
+}
+#shootBarFill { height: 100%; width: 0%; background: linear-gradient(90deg,#4ecca3,#ffd369,#e94560); transition: width .05s linear; }
+#shootBtn {
+  width: 100%; padding: 12px; border-radius: 9px; background: #e94560; color: #fff; font-weight: 800; font-size: 13px; border: none; cursor: pointer;
+}
+#shootBtn:active { background: #c73e54; }
+</style>
+</head>
+<body>
+
+<div id="score-board">
+  <div class="team"><div class="badge blue">MY</div>MAVİ YILDIZ</div>
+  <div style="display:flex;flex-direction:column;align-items:center;">
+    <div id="score">0 - 0</div>
+    <div id="timer">1:30</div>
+  </div>
+  <div class="team">KIZIL ŞAHİN<div class="badge red">KŞ</div></div>
+</div>
+
+<div id="pitchWrap">
+  <canvas id="canvas" width="340" height="500"></canvas>
+  <div id="goalFlash">GOL!</div>
+  <div id="endOverlay">
+    <h2 id="endTitle"></h2>
+    <p id="endSub"></p>
+    <button id="playAgainBtn">Tekrar Oyna</button>
+  </div>
+</div>
+
+<div class="controls">
+  <button id="reset-btn">Yeniden Başlat</button>
+  <button id="mode-btn">Mod: VS Yapay Zeka</button>
+</div>
+<div class="controls">
+  <button id="control-mode-btn">Kontrol: Sürükle</button>
+</div>
+
+<div id="arrowPad">
+  <button class="dpad-btn" id="btnUp">▲</button>
+  <div class="arrowRow">
+    <button class="dpad-btn" id="btnLeft">◀</button>
+    <div class="dpad-spacer"></div>
+    <button class="dpad-btn" id="btnRight">▶</button>
+  </div>
+  <button class="dpad-btn" id="btnDown">▼</button>
+</div>
+
+<div id="shootBar">
+  <div id="shootBarTrack"><div id="shootBarFill"></div></div>
+  <button id="shootBtn">VUR (basılı tut, bırak)</button>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+const timerEl = document.getElementById('timer');
+const resetBtn = document.getElementById('reset-btn');
+const modeBtn = document.getElementById('mode-btn');
+const goalFlashEl = document.getElementById('goalFlash');
+const endOverlay = document.getElementById('endOverlay');
+const controlModeBtn = document.getElementById('control-mode-btn');
+const arrowPad = document.getElementById('arrowPad');
+const shootBar = document.getElementById('shootBar');
+const shootBarFill = document.getElementById('shootBarFill');
+const shootBtn = document.getElementById('shootBtn');
+
+const W = 340, H = 500;
+const GOAL_W = 110, G_LEFT = (W-GOAL_W)/2, G_RIGHT = (W+GOAL_W)/2;
+let vsAI = true, scoreA = 0, scoreB = 0, isGoal = false, matchOver = false;
+let matchTime = 90, lastTickTs = null;
+let controlMode = 'drag'; // 'drag' veya 'arrows'
+let activePlayerB = null; // ok modunda kontrol edilen oyuncu
+
+// ---------- Top ----------
+class Ball {
+  constructor() { this.reset(); this.r = 8; }
+  reset() { this.x = W/2; this.y = H/2; this.vx = 0; this.vy = 0; }
+  update() {
+    this.x += this.vx; this.y += this.vy;
+    this.vx *= 0.985; this.vy *= 0.985;
+
+    if (this.x - this.r < 0) { this.x = this.r; this.vx *= -0.85; }
+    if (this.x + this.r > W) { this.x = W - this.r; this.vx *= -0.85; }
+
+    if (this.y - this.r < 0) {
+      if (this.x > G_LEFT && this.x < G_RIGHT) { if (!isGoal) handleGoal('B'); }
+      else { this.y = this.r; this.vy *= -0.85; }
+    }
+    if (this.y + this.r > H) {
+      if (this.x > G_LEFT && this.x < G_RIGHT) { if (!isGoal) handleGoal('A'); }
+      else { this.y = H - this.r; this.vy *= -0.85; }
+    }
+  }
+  draw() {
+    ctx.beginPath(); ctx.arc(this.x, this.y, this.r, 0, Math.PI*2);
+    ctx.fillStyle = '#f5f5f5'; ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = '#222'; ctx.stroke();
+  }
+}
+
+// ---------- Diskler (oyuncular) ----------
+class Disk {
+  constructor(team, isKeeper, label) {
+    this.team = team; this.isKeeper = isKeeper; this.label = label;
+    this.r = isKeeper ? 12 : 15;
+    this.x = 0; this.y = 0; this.vx = 0; this.vy = 0;
+  }
+  update() {
+    this.x += this.vx; this.y += this.vy;
+    this.vx *= 0.97; this.vy *= 0.97;
+
+    if (this.isKeeper) {
+      this.vy = 0;
+      this.y = this.team === 'A' ? 22 : H - 22;
+      // kale ağzının büyük bölümü açık kalsın diye hareket alanı iyice dar
+      const margin = this.r + 30;
+      const gLeft = G_LEFT + margin, gRight = G_RIGHT - margin;
+      const target = Math.max(gLeft, Math.min(gRight, ball.x));
+      // tepkisi belirgin şekilde yavaş/gecikmeli - top hızlıysa yetişemez
+      this.x += (target - this.x) * 0.045;
+      return;
+    }
+
+    if (this.x - this.r < 0) { this.x = this.r; this.vx *= -0.7; }
+    if (this.x + this.r > W) { this.x = W - this.r; this.vx *= -0.7; }
+    if (this.y - this.r < 0) { this.y = this.r; this.vy *= -0.7; }
+    if (this.y + this.r > H) { this.y = H - this.r; this.vy *= -0.7; }
+
+    if (this.team === 'A' && this.y + this.r > H/2) { this.y = H/2 - this.r; this.vy *= -0.5; }
+    if (this.team === 'B' && this.y - this.r < H/2) { this.y = H/2 + this.r; this.vy *= -0.5; }
+  }
+  draw() {
+    ctx.beginPath(); ctx.arc(this.x, this.y, this.r, 0, Math.PI*2);
+    ctx.fillStyle = this.team === 'A' ? '#16223d' : '#3a0f18';
+    ctx.strokeStyle = this.team === 'A' ? '#3ec6e0' : '#e94560';
+    ctx.lineWidth = 3; ctx.fill(); ctx.stroke();
+    if (controlMode === 'arrows' && this === activePlayerB) {
+      ctx.beginPath(); ctx.arc(this.x, this.y, this.r+4, 0, Math.PI*2);
+      ctx.strokeStyle = '#ffd369'; ctx.lineWidth = 2; ctx.stroke();
+    }
+    ctx.fillStyle = '#fff';
+    ctx.font = '9px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(this.label, this.x, this.y);
+  }
+}
+
+const ball = new Ball();
+const disks = [
+  new Disk('A', true, 'K'), new Disk('A', false, '7'), new Disk('A', false, '10'), new Disk('A', false, '5'),
+  new Disk('B', true, 'K'), new Disk('B', false, '9'), new Disk('B', false, '11'), new Disk('B', false, '4')
+];
+
+function resetPositions() {
+  ball.reset();
+  disks[0].x = W/2;    disks[0].y = 22;
+  disks[1].x = W*0.25; disks[1].y = 105;
+  disks[2].x = W*0.5;  disks[2].y = 155;
+  disks[3].x = W*0.75; disks[3].y = 105;
+
+  disks[4].x = W/2;    disks[4].y = H-22;
+  disks[5].x = W*0.25; disks[5].y = H-105;
+  disks[6].x = W*0.5;  disks[6].y = H-155;
+  disks[7].x = W*0.75; disks[7].y = H-105;
+  disks.forEach(d => { d.vx = 0; d.vy = 0; });
+}
+
+// ---------- Dokunma / Sürükleme ----------
+let selected = null, dragPos = null;
+function getPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  const cx = e.touches ? e.touches[0].clientX : e.clientX;
+  const cy = e.touches ? e.touches[0].clientY : e.clientY;
+  return { x: (cx - rect.left) * (W/rect.width), y: (cy - rect.top) * (H/rect.height) };
+}
+const handleStart = e => {
+  if (matchOver || controlMode !== 'drag') return;
+  const pos = getPos(e);
+  disks.forEach(d => {
+    if (d.isKeeper || (vsAI && d.team === 'A')) return;
+    if (Math.hypot(d.x - pos.x, d.y - pos.y) < d.r + 16) { selected = d; dragPos = pos; }
+  });
+};
+const handleMove = e => { if (selected) dragPos = getPos(e); };
+const handleEnd = () => {
+  if (selected && dragPos) {
+    const dx = selected.x - dragPos.x, dy = selected.y - dragPos.y;
+    const p = Math.min(Math.hypot(dx, dy) * 0.15, 15);
+    if (p > 0.5) {
+      const a = Math.atan2(dy, dx);
+      selected.vx = Math.cos(a) * p; selected.vy = Math.sin(a) * p;
+    }
+  }
+  selected = null; dragPos = null;
+};
+canvas.addEventListener('touchstart', handleStart, {passive:true});
+canvas.addEventListener('mousedown', handleStart);
+window.addEventListener('touchmove', handleMove, {passive:true});
+window.addEventListener('mousemove', handleMove);
+window.addEventListener('touchend', handleEnd);
+window.addEventListener('mouseup', handleEnd);
+
+// ---------- Ok Tuşu / D-pad Kontrolü ----------
+const ARROW_SPEED = 3.1;
+const keys = { up:false, down:false, left:false, right:false };
+
+window.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (k==='arrowup'||k==='w') keys.up=true;
+  else if (k==='arrowdown'||k==='s') keys.down=true;
+  else if (k==='arrowleft'||k==='a') keys.left=true;
+  else if (k==='arrowright'||k==='d') keys.right=true;
+});
+window.addEventListener('keyup', e => {
+  const k = e.key.toLowerCase();
+  if (k==='arrowup'||k==='w') keys.up=false;
+  else if (k==='arrowdown'||k==='s') keys.down=false;
+  else if (k==='arrowleft'||k==='a') keys.left=false;
+  else if (k==='arrowright'||k==='d') keys.right=false;
+});
+
+function bindDpadButton(id, key) {
+  const el = document.getElementById(id);
+  const press = ev => { ev.preventDefault(); keys[key] = true; };
+  const release = ev => { if (ev) ev.preventDefault(); keys[key] = false; };
+  el.addEventListener('touchstart', press, {passive:false});
+  el.addEventListener('touchend', release, {passive:false});
+  el.addEventListener('touchcancel', release, {passive:false});
+  el.addEventListener('mousedown', press);
+  el.addEventListener('mouseup', release);
+  el.addEventListener('mouseleave', release);
+}
+bindDpadButton('btnUp','up');
+bindDpadButton('btnDown','down');
+bindDpadButton('btnLeft','left');
+bindDpadButton('btnRight','right');
+
+function updateArrowControl() {
+  // top'a en yakın (kaleci hariç) bizim oyuncumuz aktif kontrol edilen olur
+  const cands = disks.filter(d => d.team === 'B' && !d.isKeeper);
+  let active = null, bestD = Infinity;
+  for (const d of cands) {
+    const dd = Math.hypot(d.x-ball.x, d.y-ball.y);
+    if (dd < bestD) { bestD = dd; active = d; }
+  }
+  activePlayerB = active;
+  if (!active) return;
+  let dx=0, dy=0;
+  if (keys.up) dy -= 1;
+  if (keys.down) dy += 1;
+  if (keys.left) dx -= 1;
+  if (keys.right) dx += 1;
+  if (dx || dy) {
+    const norm = Math.hypot(dx,dy);
+    active.vx = dx/norm*ARROW_SPEED;
+    active.vy = dy/norm*ARROW_SPEED;
+  }
+}
+
+// ---------- Vuruş Barı (ok modunda) ----------
+let shootPower = 0, shootCharging = false, shootLockFrames = 0, pendingShootPower = 0;
+const SHOOT_CHARGE_RATE = 2.2; // %/frame
+const SHOOT_MAX_VEL = 15;
+function chargeStart(e) { e.preventDefault(); shootCharging = true; }
+function chargeEnd(e) {
+  if (e) e.preventDefault();
+  if (shootCharging && activePlayerB) {
+    const power = shootPower / 100;
+    const dx = ball.x - activePlayerB.x, dy = ball.y - activePlayerB.y;
+    const dist = Math.hypot(dx,dy);
+    const nx = dx/(dist||1), ny = dy/(dist||1);
+    const SHOOT_RANGE = activePlayerB.r + ball.r + 10;
+    if (power > 0.05) {
+      if (dist < SHOOT_RANGE) {
+        // top yeterince yakın: direkt vur
+        ball.vx = nx * power * SHOOT_MAX_VEL;
+        ball.vy = ny * power * SHOOT_MAX_VEL;
+        activePlayerB.vx = nx * power * (SHOOT_MAX_VEL*0.4);
+        activePlayerB.vy = ny * power * (SHOOT_MAX_VEL*0.4);
+        shootLockFrames = 6;
+      } else {
+        // top uzakta: oyuncu topa doğru hızla koşsun, değince otomatik vurulsun
+        const runSpeed = 6 + power * 6;
+        activePlayerB.vx = nx * runSpeed;
+        activePlayerB.vy = ny * runSpeed;
+        pendingShootPower = power; // topa değince bu güçle vurulacak
+      }
+    }
+  }
+  shootCharging = false; shootPower = 0;
+  shootBarFill.style.width = '0%';
+}
+shootBtn.addEventListener('touchstart', chargeStart, {passive:false});
+shootBtn.addEventListener('touchend', chargeEnd, {passive:false});
+shootBtn.addEventListener('touchcancel', chargeEnd, {passive:false});
+shootBtn.addEventListener('mousedown', chargeStart);
+shootBtn.addEventListener('mouseup', chargeEnd);
+shootBtn.addEventListener('mouseleave', () => { if (shootCharging) chargeEnd(); });
+function updateShootBar() {
+  if (!shootCharging) return;
+  shootPower = Math.min(100, shootPower + SHOOT_CHARGE_RATE);
+  shootBarFill.style.width = shootPower + '%';
+}
+
+// ---------- Çarpışmalar ----------
+function resolveCollisions() {
+  const all = [...disks, ball];
+  for (let i = 0; i < all.length; i++) {
+    for (let j = i+1; j < all.length; j++) {
+      let o1 = all[i], o2 = all[j];
+      if (shootLockFrames > 0 && (o1 === ball || o2 === ball)) continue; // vuruş anı: top hızını bozma
+      let dx = o2.x - o1.x, dy = o2.y - o1.y, dist = Math.hypot(dx, dy);
+      let minDist = o1.r + o2.r;
+      if (dist < minDist) {
+        let overlap = minDist - dist + 1, nx = dx/(dist||1), ny = dy/(dist||1);
+        if (!o1.isKeeper) { o1.x -= nx*overlap*0.5; o1.y -= ny*overlap*0.5; }
+        if (!o2.isKeeper) { o2.x += nx*overlap*0.5; o2.y += ny*overlap*0.5; }
+        let kx = o1.vx - o2.vx, ky = o1.vy - o2.vy, p = (nx*kx + ny*ky) * 0.95;
+        if (!o1.isKeeper) { o1.vx -= p*nx; o1.vy -= p*ny; }
+        if (!o2.isKeeper) { o2.vx += p*nx; o2.vy += p*ny; }
+        if ((o1 === ball && o2.isKeeper) || (o2 === ball && o1.isKeeper)) {
+          const keeper = o1.isKeeper ? o1 : o2;
+          // sadece hafif bir sekme - kaleci topu tamamen durdurmasın
+          ball.vy += keeper.team === 'A' ? 1.2 : -1.2;
+        }
+      }
+    }
+  }
+}
+
+// ---------- Yapay Zeka ----------
+// Takım A = rakip (üstte, mavi) -> aktif/akıllı AI
+// Takım B = bizim takım (altta, kırmızı) -> sadece sürüklenmeyen oyuncular, top TAM önlerine gelince hafif vurur
+let aiTimer = 0;
+
+function nearestToBall(team) {
+  const cands = disks.filter(d => d.team === team && !d.isKeeper);
+  let best = null, bestD = Infinity;
+  for (const d of cands) {
+    const dd = Math.hypot(d.x-ball.x, d.y-ball.y);
+    if (dd < bestD) { bestD = dd; best = d; }
+  }
+  return best;
+}
+function updateOpponentAI(team) {
+  const cands = disks.filter(d => d.team === team && !d.isKeeper);
+  const attacker = nearestToBall(team);
+  const distToBall = attacker ? Math.hypot(attacker.x-ball.x, attacker.y-ball.y) : Infinity;
+  const ballInOwnHalf = team === 'A' ? ball.y > H/2 - 40 : ball.y < H/2 + 40;
+
+  cands.forEach(d => {
+    if (Math.hypot(d.vx, d.vy) > 0.6) return; // hareket halindeyken müdahale etme
+
+    if (d === attacker && distToBall < 160) {
+      const a = Math.atan2(ball.y - d.y, ball.x - d.x);
+      const p = 6.5 + Math.random()*3;
+      d.vx = Math.cos(a)*p; d.vy = Math.sin(a)*p;
+    } else if (d === attacker && ballInOwnHalf) {
+      const a = Math.atan2(ball.y - d.y, ball.x - d.x);
+      const p = 4.5;
+      d.vx = Math.cos(a)*p*0.5; d.vy = Math.sin(a)*p*0.5;
+    } else if (ballInOwnHalf) {
+      const targetY = team === 'A' ? H*0.62 : H*0.38;
+      const a = Math.atan2(targetY - d.y, (W/2) - d.x);
+      const p = 3;
+      d.vx = Math.cos(a)*p*0.35; d.vy = Math.sin(a)*p*0.35;
+    }
+  });
+}
+
+// bizim takımın sürüklenmeyen oyuncuları: sadece top tam önlerine gelince (dar mesafe) tek seferlik hafif vuruş
+const OWN_AI_RADIUS = 38;
+const OWN_AI_COOLDOWN = 45;
+function updateOwnTeamAssist(team) {
+  const skipActive = controlMode === 'arrows' ? activePlayerB : selected;
+  const cands = disks.filter(d => d.team === team && !d.isKeeper && d !== skipActive);
+  cands.forEach(d => {
+    if (d.hitCooldown === undefined) d.hitCooldown = 0;
+    if (d.hitCooldown > 0) { d.hitCooldown--; return; }
+    if (Math.hypot(d.vx, d.vy) > 0.5) return; // zaten hareket halindeyse dokunma
+    const dist = Math.hypot(d.x - ball.x, d.y - ball.y);
+    if (dist < OWN_AI_RADIUS) {
+      const a = Math.atan2(ball.y - d.y, ball.x - d.x);
+      const p = 5 + Math.random()*2;
+      d.vx = Math.cos(a)*p; d.vy = Math.sin(a)*p;
+      d.hitCooldown = OWN_AI_COOLDOWN;
+    }
+  });
+}
+
+function updateAI() {
+  if (isGoal || matchOver) return;
+  aiTimer++;
+  if (aiTimer % 35 === 0) {
+    updateOpponentAI('A'); // rakip - aktif/akıllı
+  }
+  updateOwnTeamAssist('B'); // bizim takım - sadece top tam önüne gelince hafif vuruş
+}
+
+// ---------- Gol & Maç Akışı ----------
+function handleGoal(team) {
+  isGoal = true;
+  if (team === 'A') scoreA++; else scoreB++;
+  scoreEl.innerText = `${scoreA} - ${scoreB}`;
+  goalFlashEl.style.display = 'block';
+  requestAnimationFrame(() => goalFlashEl.style.opacity = '1');
+  setTimeout(() => {
+    goalFlashEl.style.opacity = '0';
+    setTimeout(() => { goalFlashEl.style.display = 'none'; }, 250);
+    resetPositions();
+    isGoal = false;
+  }, 1000);
+}
+
+function updateTimer(ts) {
+  if (lastTickTs == null) lastTickTs = ts;
+  const dt = (ts - lastTickTs) / 1000;
+  lastTickTs = ts;
+  if (matchOver || isGoal) return;
+  matchTime -= dt;
+  if (matchTime <= 0) { matchTime = 0; endMatch(); }
+  const m = Math.floor(matchTime/60), s = Math.floor(matchTime%60);
+  timerEl.textContent = m + ':' + String(s).padStart(2,'0');
+}
+
+function endMatch() {
+  matchOver = true;
+  endOverlay.style.display = 'flex';
+  const title = scoreA > scoreB ? '🏆 Kazandın!' : scoreA < scoreB ? '😔 Kaybettin' : '🤝 Berabere';
+  document.getElementById('endTitle').textContent = title;
+  document.getElementById('endSub').textContent = 'Skor: ' + scoreA + ' - ' + scoreB;
+}
+
+function startMatch() {
+  scoreA = 0; scoreB = 0; matchTime = 90; lastTickTs = null;
+  scoreEl.innerText = '0 - 0';
+  matchOver = false; isGoal = false;
+  endOverlay.style.display = 'none';
+  resetPositions();
+}
+
+// ---------- Çizim ----------
+function drawPitch() {
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#0b3d24';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(255,255,255,0.03)';
+  for (let y = 0; y < H; y += 34) if ((y/34)%2===0) ctx.fillRect(0,y,W,34);
+  ctx.fillStyle = 'rgba(255,255,255,0.16)';
+  for (let x = 12; x < W; x += 20) for (let y = 12; y < H; y += 20) {
+    ctx.beginPath(); ctx.arc(x,y,1.1,0,Math.PI*2); ctx.fill();
+  }
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 2;
+  ctx.strokeRect(3, 3, W-6, H-6);
+  ctx.beginPath(); ctx.moveTo(3, H/2); ctx.lineTo(W-3, H/2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(W/2, H/2, 42, 0, Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(W/2, H/2, 2.5, 0, Math.PI*2); ctx.fillStyle='#fff'; ctx.fill();
+  const boxW = 180, boxH = 60;
+  ctx.strokeRect(W/2-boxW/2, 3, boxW, boxH);
+  ctx.strokeRect(W/2-boxW/2, H-3-boxH, boxW, boxH);
+  ctx.strokeRect(G_LEFT, 3, GOAL_W, 24);
+  ctx.strokeRect(G_LEFT, H-3-24, GOAL_W, 24);
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  ctx.fillRect(G_LEFT, -14, GOAL_W, 17);
+  ctx.fillRect(G_LEFT, H-3, GOAL_W, 17);
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1;
+  ctx.strokeRect(G_LEFT, -14, GOAL_W, 17);
+  ctx.strokeRect(G_LEFT, H-3, GOAL_W, 17);
+}
+
+function drawAimLine() {
+  if (!selected || !dragPos) return;
+  const dx = selected.x - dragPos.x, dy = selected.y - dragPos.y;
+  const power = Math.min(Math.hypot(dx,dy)*0.15, 15);
+  const t = Math.min(power/15, 1);
+  const r = Math.round(255), g = Math.round(220 - t*140), b = Math.round(90 - t*90);
+  ctx.beginPath();
+  ctx.moveTo(selected.x, selected.y);
+  ctx.lineTo(selected.x + dx*0.4, selected.y + dy*0.4);
+  ctx.strokeStyle = `rgb(${r},${Math.max(0,g)},${Math.max(0,b)})`;
+  ctx.lineWidth = 3;
+  ctx.setLineDash([4,4]); ctx.stroke(); ctx.setLineDash([]);
+}
+
+function loop(ts) {
+  if (!matchOver) {
+    if (controlMode === 'arrows') { updateArrowControl(); updateShootBar(); }
+    if (pendingShootPower > 0 && activePlayerB) {
+      const dx = ball.x - activePlayerB.x, dy = ball.y - activePlayerB.y;
+      const dist = Math.hypot(dx,dy);
+      const SHOOT_RANGE = activePlayerB.r + ball.r + 10;
+      if (dist < SHOOT_RANGE) {
+        const nx = dx/(dist||1), ny = dy/(dist||1);
+        ball.vx = nx * pendingShootPower * SHOOT_MAX_VEL;
+        ball.vy = ny * pendingShootPower * SHOOT_MAX_VEL;
+        activePlayerB.vx = nx * pendingShootPower * (SHOOT_MAX_VEL*0.4);
+        activePlayerB.vy = ny * pendingShootPower * (SHOOT_MAX_VEL*0.4);
+        shootLockFrames = 6;
+        pendingShootPower = 0;
+      }
+    }
+    ball.update(); disks.forEach(d => d.update());
+    resolveCollisions(); updateAI();
+    if (shootLockFrames > 0) shootLockFrames--;
+    updateTimer(ts || 0);
+  }
+  drawPitch(); ball.draw(); disks.forEach(d => d.draw());
+  drawAimLine();
+  requestAnimationFrame(loop);
+}
+
+resetBtn.onclick = () => startMatch();
+modeBtn.onclick = () => {
+  vsAI = !vsAI;
+  modeBtn.innerText = vsAI ? 'Mod: VS Yapay Zeka' : 'Mod: 2 Oyuncu';
+  resetPositions();
+};
+document.getElementById('playAgainBtn').onclick = () => startMatch();
+controlModeBtn.onclick = () => {
+  controlMode = controlMode === 'drag' ? 'arrows' : 'drag';
+  controlModeBtn.innerText = controlMode === 'drag' ? 'Kontrol: Sürükle' : 'Kontrol: Oklar';
+  arrowPad.style.display = controlMode === 'arrows' ? 'flex' : 'none';
+  shootBar.style.display = controlMode === 'arrows' ? 'flex' : 'none';
+  selected = null; dragPos = null;
+  keys.up = keys.down = keys.left = keys.right = false;
+  shootCharging = false; shootPower = 0; shootBarFill.style.width = '0%';
+};
+
+resetPositions();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
